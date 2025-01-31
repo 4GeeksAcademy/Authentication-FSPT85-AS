@@ -1,19 +1,20 @@
-"""
-This module takes care of starting the API Server, Loading the DB and Adding the endpoints
-"""
 import os
 from flask import Flask, request, jsonify, url_for
 from sqlalchemy import select
 from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager
 from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from admin import setup_admin
 from models import db, Characters, Planets, Vehicles, User, Favorites
 #from models import Person
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+app.config["JWT_SECRET_KEY"] = "super-secret"  # Change this!
+jwt = JWTManager(app)
 
 db_url = os.getenv("DATABASE_URL")
 if db_url is not None:
@@ -37,17 +38,41 @@ def handle_invalid_usage(error):
 def sitemap():
     return generate_sitemap(app)
 
-#endpoint para obtener todos los usuarios
-@app.route('/user', methods=['GET'])
-def get_all_users():
-    data = db.session.scalars(select(User)).all()
-    if not data:  
-        return jsonify({"error": "No users found"}), 404
-    results = list(map(lambda item: item.serialize(), data))
-    response_body = {
-        "results":results
-    }
-    return jsonify(response_body), 200
+@app.route('/signup', methods=['POST'])
+def signup():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    
+    if User.query.filter_by(email=email).first():
+        return jsonify({'message': 'El usuario ya existe'}), 400
+    
+    new_user = User(email=email, password=password)  # Guardado en texto plano
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify({'message': 'Usuario registrado exitosamente'}), 201
+
+# Create a route to authenticate your users and return JWTs. The
+# create_access_token() function is used to actually generate the JWT.
+@app.route("/login", methods=["POST"])
+def login():
+    username = request.json.get("username", None)
+    password = request.json.get("password", None)
+    if username != "aitorsantos90@gmail.com" or password != "admin123":
+        return jsonify({"msg": "Bad username or password"}), 401
+
+    access_token = create_access_token(identity=username)
+    return jsonify(access_token=access_token)
+
+
+# Protect a route with jwt_required, which will kick out requests
+# without a valid JWT present.
+@app.route("/protected", methods=["GET"])
+@jwt_required()
+def protected():
+    # Access the identity of the current user with get_jwt_identity
+    current_user = get_jwt_identity()
+    return jsonify(logged_in_as=current_user), 200
 
 #endpoint para obtener todos los personajes
 @app.route('/character', methods=['GET'])
@@ -382,6 +407,8 @@ def delete_favorite_vehicle(user_id, vehicle_id):
         return jsonify({"msg": f"Vehicle {vehicle_id} removed from user {user_id}'s favorites."}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
 
 
 

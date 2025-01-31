@@ -1,8 +1,16 @@
+from flask import Flask
+from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import mapped_column
 from sqlalchemy import Integer, String, Boolean, Numeric
 
+
 db = SQLAlchemy()
+app = Flask(__name__)
+app.url_map.strict_slashes = False
+jwt = JWTManager(app)
+
+
 
 
 class User(db.Model):
